@@ -74,7 +74,7 @@ export default function EventDetailsPage() {
     try {
       setIsLoading(true);
       
-      // SEMPRE verificar cache PRIMEIRO antes de qualquer requisição
+      // SEMPRE verificar cache primeiro (especialmente importante quando offline)
       const { getCache } = await import('@/lib/cacheService');
       const { getCacheKey } = await import('@/lib/api');
       
@@ -121,7 +121,7 @@ export default function EventDetailsPage() {
           })
           .catch((error) => {
             // Se falhar, manter o cache que já está sendo exibido
-            console.log('[Cache] ⚠️ Não foi possível atualizar, mantendo cache:', error.message);
+            console.debug('[Cache] ⚠️ Não foi possível atualizar, mantendo cache:', error.message);
           });
         
         return; // Retornar imediatamente após usar cache
@@ -158,7 +158,7 @@ export default function EventDetailsPage() {
       for (const key of possibleKeys) {
         const cached = getCache<EventResponseDTO>(key);
         if (cached) {
-          console.log(`[Cache] ✅ Usando cache após erro: ${key}`);
+          console.log(`[Cache] Usando cache após erro: ${key}`);
           setEvent(cached);
           toast.warning('Usando dados em cache devido a erro na requisição');
           return;

@@ -171,10 +171,25 @@ async function getWithCache<T>(
   // SEMPRE verificar cache primeiro (cache-first strategy)
   const cached = getCache<T>(cacheKey);
   
-  // Se houver cache disponível, retornar imediatamente (não fazer requisição)
-  // Isso garante que dados pré-carregados sejam usados mesmo quando há conexão
+  // Se houver cache disponível, usar imediatamente (mesmo online)
+  // Isso garante que dados pré-carregados sejam usados
   if (cached !== null) {
     console.log(`[Cache] ✅ Usando cache disponível: ${cacheKey}`);
+    
+    // Se estiver online, tentar atualizar em background (sem bloquear)
+    if (navigator.onLine) {
+      fetcher()
+        .then((data) => {
+          // Cache será atualizado automaticamente pelo interceptor
+          console.log(`[Cache] ✅ Dados atualizados em background: ${cacheKey}`);
+        })
+        .catch((error) => {
+          // Se falhar, manter o cache que já está sendo usado
+          console.debug(`[Cache] ⚠️ Não foi possível atualizar em background: ${cacheKey}`, error.message);
+        });
+    }
+    
+    // Retornar cache imediatamente (não esperar atualização)
     return cached;
   }
   
@@ -192,7 +207,7 @@ async function getWithCache<T>(
     // Se falhar, verificar se conseguiu cache enquanto fazia requisição (race condition)
     const cachedAfterError = getCache<T>(cacheKey);
     if (cachedAfterError !== null) {
-      console.warn(`[Cache] ⚠️ Usando cache após erro na requisição: ${cacheKey}`, error.message);
+      console.warn(`[Cache] ⚠️ Usando cache após erro na requisição: ${cacheKey}`);
       return cachedAfterError;
     }
     
