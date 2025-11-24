@@ -168,28 +168,32 @@ async function getWithCache<T>(
   cacheKey: string,
   fetcher: () => Promise<T>
 ): Promise<T> {
-  // Sempre verificar cache primeiro (mesmo online, para performance)
+  // SEMPRE verificar cache primeiro (cache-first strategy)
   const cached = getCache<T>(cacheKey);
   
-  // Se estiver offline, usar cache se disponível
+  // Se houver cache disponível, retornar imediatamente (não fazer requisição)
+  // Isso garante que dados pré-carregados sejam usados mesmo quando há conexão
+  if (cached !== null) {
+    console.log(`[Cache] ✅ Usando cache disponível: ${cacheKey}`);
+    return cached;
+  }
+  
+  // Se não houver cache e estiver offline, lançar erro
   if (!navigator.onLine) {
-    if (cached !== null) {
-      return cached;
-    }
-    // Se não houver cache e estiver offline, lançar erro
     throw new Error('Sem conexão e sem dados em cache');
   }
   
-  // Se estiver online, tentar fazer requisição primeiro
+  // Se não houver cache mas estiver online, fazer requisição
   try {
     const data = await fetcher();
     // Cache será atualizado automaticamente pelo interceptor
     return data;
   } catch (error: any) {
-    // Se falhar (backend offline, erro de rede, etc), tentar usar cache como fallback
-    if (cached !== null) {
-      console.warn(`[Cache] Usando cache devido a erro na requisição:`, cacheKey);
-      return cached;
+    // Se falhar, verificar se conseguiu cache enquanto fazia requisição (race condition)
+    const cachedAfterError = getCache<T>(cacheKey);
+    if (cachedAfterError !== null) {
+      console.warn(`[Cache] ⚠️ Usando cache após erro na requisição: ${cacheKey}`, error.message);
+      return cachedAfterError;
     }
     
     // Verificar se é erro de rede/backend offline

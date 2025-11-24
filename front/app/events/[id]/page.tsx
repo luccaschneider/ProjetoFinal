@@ -74,7 +74,7 @@ export default function EventDetailsPage() {
     try {
       setIsLoading(true);
       
-      // SEMPRE verificar cache primeiro (especialmente importante quando offline)
+      // SEMPRE verificar cache PRIMEIRO antes de qualquer requisição
       const { getCache } = await import('@/lib/cacheService');
       const { getCacheKey } = await import('@/lib/api');
       
@@ -86,24 +86,45 @@ export default function EventDetailsPage() {
         `event_${params.id}`,
       ];
       
-      // Verificar cache primeiro
+      // Verificar cache primeiro - se encontrar, usar imediatamente
+      let cachedEvent: EventResponseDTO | null = null;
+      let cacheKeyFound = '';
+      
       for (const key of possibleKeys) {
         const cached = getCache<EventResponseDTO>(key);
         if (cached) {
-          console.log(`[Cache] Encontrado evento no cache com chave: ${key}`);
-          setEvent(cached);
-          setIsLoading(false);
-          
-          // Se estiver offline, usar cache e não tentar requisição
-          if (!navigator.onLine) {
-            toast.info('Offline: Exibindo dados do cache');
-            return;
-          }
-          
-          // Se estiver online, tentar atualizar em background (mas já mostrar cache)
-          // Continuar para fazer requisição e atualizar cache
+          cachedEvent = cached;
+          cacheKeyFound = key;
+          console.log(`[Cache] ✅ Encontrado evento no cache com chave: ${key}`);
           break;
         }
+      }
+      
+      // Se encontrou cache, usar imediatamente
+      if (cachedEvent) {
+        setEvent(cachedEvent);
+        setIsLoading(false);
+        
+        // Se estiver offline, usar cache e não tentar requisição
+        if (!navigator.onLine) {
+          toast.info('Offline: Exibindo dados do cache');
+          return;
+        }
+        
+        // Se estiver online, tentar atualizar em background (sem bloquear)
+        // Mas já mostramos o cache, então a UI não fica travada
+        eventApi.getById(params.id as string)
+          .then((updatedData) => {
+            // Se a atualização funcionou, atualizar o estado
+            setEvent(updatedData);
+            console.log('[Cache] ✅ Dados atualizados em background');
+          })
+          .catch((error) => {
+            // Se falhar, manter o cache que já está sendo exibido
+            console.log('[Cache] ⚠️ Não foi possível atualizar, mantendo cache:', error.message);
+          });
+        
+        return; // Retornar imediatamente após usar cache
       }
       
       // Se não encontrou cache e está offline, mostrar erro
@@ -112,10 +133,12 @@ export default function EventDetailsPage() {
         setTimeout(() => {
           router.push('/events');
         }, 2000);
+        setIsLoading(false);
         return;
       }
       
-      // Se estiver online, fazer requisição (pode atualizar cache ou usar cache como fallback)
+      // Se não encontrou cache mas está online, fazer requisição
+      // (getWithCache vai tentar cache novamente e fazer requisição se necessário)
       const data = await eventApi.getById(params.id as string);
       setEvent(data);
     } catch (error: any) {
@@ -135,7 +158,7 @@ export default function EventDetailsPage() {
       for (const key of possibleKeys) {
         const cached = getCache<EventResponseDTO>(key);
         if (cached) {
-          console.log(`[Cache] Usando cache após erro: ${key}`);
+          console.log(`[Cache] ✅ Usando cache após erro: ${key}`);
           setEvent(cached);
           toast.warning('Usando dados em cache devido a erro na requisição');
           return;
