@@ -16,8 +16,45 @@ import { getCache, setCache, removeCache } from './cacheService';
 import { saveOperation } from './offlineStorage';
 import { toast } from 'sonner';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
-const CERTIFICATE_SERVICE_URL = process.env.NEXT_PUBLIC_CERTIFICATE_SERVICE_URL || 'http://localhost:3001';
+// Detectar automaticamente a URL base baseado no ambiente
+function getBaseUrl() {
+  if (typeof window !== 'undefined') {
+    // No cliente, usar o hostname atual
+    const hostname = window.location.hostname;
+    if (hostname === '177.44.248.82' || hostname.includes('177.44.248.82')) {
+      const url = `http://${hostname}:8080`;
+      console.log(`[API] Usando URL de produção (backend): ${url}`);
+      return url;
+    }
+  }
+  // No servidor ou desenvolvimento, usar variável de ambiente ou localhost
+  const url = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
+  if (typeof window === 'undefined') {
+    console.log(`[API] Usando URL (SSR): ${url}`);
+  }
+  return url;
+}
+
+function getCertificateServiceUrl() {
+  if (typeof window !== 'undefined') {
+    // No cliente, usar o hostname atual
+    const hostname = window.location.hostname;
+    if (hostname === '177.44.248.82' || hostname.includes('177.44.248.82')) {
+      const url = `http://${hostname}:3001`;
+      console.log(`[API] Usando URL de produção (certificados): ${url}`);
+      return url;
+    }
+  }
+  // No servidor ou desenvolvimento, usar variável de ambiente ou localhost
+  const url = process.env.NEXT_PUBLIC_CERTIFICATE_SERVICE_URL || 'http://localhost:3001';
+  if (typeof window === 'undefined') {
+    console.log(`[API] Usando URL de certificados (SSR): ${url}`);
+  }
+  return url;
+}
+
+const API_BASE_URL = getBaseUrl();
+const CERTIFICATE_SERVICE_URL = getCertificateServiceUrl();
 
 // Criar instância do axios para o backend Java
 export const apiClient: AxiosInstance = axios.create({
