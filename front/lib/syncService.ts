@@ -1,7 +1,8 @@
 import { getPendingOperations, removeOperation, incrementRetry, removeMaxRetriesOperations, type PendingOperation } from './offlineStorage';
-import { adminApi, inscriptionApi } from './api';
+import { adminApi, inscriptionApi, apiClient } from './api';
 import { setCache, removeCache } from './cacheService';
 import { toast } from 'sonner';
+import type { UsuarioResponseDTO, EventResponseDTO, EventoInscritoDTO } from './types';
 
 export interface SyncResult {
   success: number;
@@ -11,24 +12,35 @@ export interface SyncResult {
 
 /**
  * Sincroniza uma operação de cadastro rápido
+ * Usa apiClient diretamente para evitar mutateWithOffline durante sincronização
  */
 async function syncCadastroRapido(operation: PendingOperation): Promise<boolean> {
   try {
-    const result = await adminApi.cadastroRapido(operation.data);
+    // Chamar diretamente a API sem passar por mutateWithOffline
+    const response = await apiClient.post<UsuarioResponseDTO>('/api/admin/cadastro-rapido', operation.data);
     
     // Atualizar cache de usuários
     removeCache('usuarios');
     
     // Se houver eventId, atualizar cache de inscrições e presenças
     if (operation.data.eventId) {
-      removeCache(`inscriptions`);
+      removeCache('inscriptions');
       removeCache(`presences_${operation.data.eventId}`);
+      removeCache(`usuarios_inscritos_${operation.data.eventId}`);
     }
     
     return true;
   } catch (error: any) {
     // Se o erro for que o usuário já existe, considerar sucesso
-    if (error.response?.status === 400 && error.response?.data?.message?.includes('já cadastrado')) {
+    if (error.response?.status === 400 && 
+        (error.response?.data?.message?.includes('já cadastrado') || 
+         error.response?.data?.message?.includes('já existe') ||
+         error.response?.data?.message?.includes('already'))) {
+      // Limpar cache para forçar atualização
+      removeCache('usuarios');
+      if (operation.data.eventId) {
+        removeCache(`usuarios_inscritos_${operation.data.eventId}`);
+      }
       return true;
     }
     throw error;
@@ -37,10 +49,12 @@ async function syncCadastroRapido(operation: PendingOperation): Promise<boolean>
 
 /**
  * Sincroniza uma operação de inscrição
+ * Usa apiClient diretamente para evitar mutateWithOffline durante sincronização
  */
 async function syncInscricao(operation: PendingOperation): Promise<boolean> {
   try {
-    await inscriptionApi.inscrever(operation.data.eventId);
+    // Chamar diretamente a API sem passar por mutateWithOffline
+    await apiClient.post<EventResponseDTO>(`/api/events/${operation.data.eventId}/inscricao`);
     
     // Atualizar cache de inscrições
     removeCache('inscriptions');
@@ -49,7 +63,12 @@ async function syncInscricao(operation: PendingOperation): Promise<boolean> {
     return true;
   } catch (error: any) {
     // Se o erro for que já está inscrito, considerar sucesso
-    if (error.response?.status === 400 && error.response?.data?.message?.includes('já inscrito')) {
+    if (error.response?.status === 400 && 
+        (error.response?.data?.message?.includes('já inscrito') ||
+         error.response?.data?.message?.includes('already'))) {
+      // Limpar cache para forçar atualização
+      removeCache('inscriptions');
+      removeCache(`event_${operation.data.eventId}`);
       return true;
     }
     throw error;
@@ -58,10 +77,12 @@ async function syncInscricao(operation: PendingOperation): Promise<boolean> {
 
 /**
  * Sincroniza uma operação de presença
+ * Usa apiClient diretamente para evitar mutateWithOffline durante sincronização
  */
 async function syncPresenca(operation: PendingOperation): Promise<boolean> {
   try {
-    await adminApi.registrarPresenca(operation.data);
+    // Chamar diretamente a API sem passar por mutateWithOffline
+    await apiClient.post<EventoInscritoDTO>('/api/admin/presenca', operation.data);
     
     // Atualizar cache de presenças
     removeCache(`presences_${operation.data.eventId}`);
@@ -69,6 +90,15 @@ async function syncPresenca(operation: PendingOperation): Promise<boolean> {
     
     return true;
   } catch (error: any) {
+    // Se o erro for que a presença já foi registrada, considerar sucesso
+    if (error.response?.status === 400 && 
+        (error.response?.data?.message?.includes('já registrada') ||
+         error.response?.data?.message?.includes('already'))) {
+      // Limpar cache para forçar atualização
+      removeCache(`presences_${operation.data.eventId}`);
+      removeCache(`usuarios_inscritos_${operation.data.eventId}`);
+      return true;
+    }
     throw error;
   }
 }
@@ -100,26 +130,40 @@ export async function syncPendingOperations(): Promise<SyncResult> {
     errors: [],
   };
 
+  // Verificar se está no cliente
+  if (typeof window === 'undefined') {
+    return result;
+  }
+
   // Verificar se está online
   if (!navigator.onLine) {
-    toast.error('Sem conexão com a internet. Conecte-se para sincronizar.');
+    // Usar setTimeout para evitar problemas de hidratação
+    setTimeout(() => {
+      toast.error('Sem conexão com a internet. Conecte-se para sincronizar.');
+    }, 0);
     return result;
   }
 
   // Remover operações que excederam tentativas
   const removed = removeMaxRetriesOperations();
   if (removed > 0) {
-    toast.warning(`${removed} operação(ões) foram removidas por excesso de tentativas.`);
+    setTimeout(() => {
+      toast.warning(`${removed} operação(ões) foram removidas por excesso de tentativas.`);
+    }, 0);
   }
 
   const operations = getPendingOperations();
   
   if (operations.length === 0) {
-    toast.info('Nenhuma operação pendente para sincronizar.');
+    setTimeout(() => {
+      toast.info('Nenhuma operação pendente para sincronizar.');
+    }, 0);
     return result;
   }
 
-  toast.info(`Sincronizando ${operations.length} operação(ões)...`);
+  setTimeout(() => {
+    toast.info(`Sincronizando ${operations.length} operação(ões)...`);
+  }, 0);
 
   // Processar operações em ordem (FIFO)
   for (const operation of operations) {
@@ -147,16 +191,18 @@ export async function syncPendingOperations(): Promise<SyncResult> {
     }
   }
 
-  // Feedback ao usuário
-  if (result.success > 0 && result.failed === 0) {
-    toast.success(`${result.success} operação(ões) sincronizada(s) com sucesso!`);
-  } else if (result.success > 0 && result.failed > 0) {
-    toast.warning(
-      `${result.success} operação(ões) sincronizada(s), ${result.failed} falharam.`
-    );
-  } else if (result.failed > 0) {
-    toast.error(`Falha ao sincronizar ${result.failed} operação(ões). Tente novamente.`);
-  }
+  // Feedback ao usuário (usar setTimeout para evitar problemas de hidratação)
+  setTimeout(() => {
+    if (result.success > 0 && result.failed === 0) {
+      toast.success(`${result.success} operação(ões) sincronizada(s) com sucesso!`);
+    } else if (result.success > 0 && result.failed > 0) {
+      toast.warning(
+        `${result.success} operação(ões) sincronizada(s), ${result.failed} falharam.`
+      );
+    } else if (result.failed > 0) {
+      toast.error(`Falha ao sincronizar ${result.failed} operação(ões). Tente novamente.`);
+    }
+  }, 0);
 
   return result;
 }

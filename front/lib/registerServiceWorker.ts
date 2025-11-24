@@ -4,12 +4,32 @@
  * Registra o Service Worker para cachear páginas e assets
  */
 export function registerServiceWorker() {
-  if (typeof window === 'undefined' || !('serviceWorker' in navigator)) {
-    console.log('[SW] Service Worker não suportado');
+  // Verificar se está no cliente e se Service Worker é suportado
+  if (typeof window === 'undefined') {
     return;
   }
 
-  window.addEventListener('load', () => {
+  if (!('serviceWorker' in navigator)) {
+    // Não logar como erro, apenas ignorar silenciosamente
+    return;
+  }
+
+  // Verificar se já está registrado
+  if (navigator.serviceWorker.controller) {
+    return;
+  }
+
+  // Aguardar o carregamento completo da página
+  if (document.readyState === 'loading') {
+    window.addEventListener('load', () => {
+      registerSW();
+    });
+  } else {
+    // Página já carregou, registrar imediatamente
+    registerSW();
+  }
+
+  function registerSW() {
     navigator.serviceWorker
       .register('/sw.js')
       .then((registration) => {
@@ -21,8 +41,11 @@ export function registerServiceWorker() {
         }, 60 * 60 * 1000); // A cada hora
       })
       .catch((error) => {
-        console.error('[SW] Erro ao registrar Service Worker:', error);
+        // Logar apenas em desenvolvimento
+        if (process.env.NODE_ENV === 'development') {
+          console.error('[SW] Erro ao registrar Service Worker:', error);
+        }
       });
-  });
+  }
 }
 
