@@ -255,33 +255,34 @@ export default function EventDetailsPage() {
     // Verificar se está offline ANTES de qualquer coisa
     const isOffline = typeof window !== 'undefined' && !navigator.onLine;
     
-    // Se estiver offline, fechar dialog IMEDIATAMENTE e salvar offline
+    // Se estiver offline, salvar diretamente offline SEM tentar requisição
     if (isOffline) {
-      // Fechar dialog ANTES de qualquer coisa para evitar reload
-      setIsQuickRegisterOpen(false);
-      reset();
-      setIsSubmitting(true);
-      
-      // Usar setTimeout para garantir que o dialog feche antes de qualquer outra ação
-      setTimeout(async () => {
-        try {
-          // Tentar salvar offline (vai falhar a requisição mas salvar na fila)
-          await adminApi.cadastroRapido({
-            name: data.name,
-            email: data.email,
-            eventId: params.id as string,
-          });
-          // Se chegou aqui, foi salvo offline com sucesso
-          toast.success('Operação salva offline. Será sincronizada quando a conexão voltar.');
-        } catch (error: any) {
-          // O mutateWithOffline já salvou offline e mostrou mensagem
-          // Não fazer nada além de garantir que o dialog está fechado
-        } finally {
-          setIsSubmitting(false);
-        }
-      }, 0);
+      try {
+        setIsSubmitting(true);
+        
+        // Salvar diretamente offline sem tentar fazer requisição
+        const { saveOperation } = await import('@/lib/offlineStorage');
+        saveOperation('CADASTRO_RAPIDO', {
+          name: data.name,
+          email: data.email,
+          eventId: params.id as string,
+        });
+        
+        // Fechar dialog e limpar form IMEDIATAMENTE
+        setIsQuickRegisterOpen(false);
+        reset();
+        
+        // Mostrar mensagem de sucesso
+        toast.success('Operação salva offline. Será sincronizada quando a conexão voltar.');
+      } catch (error: any) {
+        console.error('Erro ao salvar offline:', error);
+        toast.error('Erro ao salvar operação offline');
+      } finally {
+        setIsSubmitting(false);
+      }
       
       // Retornar imediatamente - NÃO fazer mais nada quando offline
+      // NÃO fazer refresh, NÃO fazer reload, apenas fechar dialog
       return;
     }
     
@@ -322,13 +323,15 @@ export default function EventDetailsPage() {
       );
       
       if (isNetworkErr) {
-        // Se ficou offline, fechar dialog e não fazer refresh
+        // Se ficou offline durante a requisição, fechar dialog e não fazer refresh
         setIsQuickRegisterOpen(false);
         reset();
-        // O mutateWithOffline já mostrou mensagem
+        // O mutateWithOffline já salvou offline e mostrou mensagem
+        // Não fazer refresh quando offline
       } else {
         toast.error(error.response?.data?.message || 'Erro ao cadastrar usuário');
         // Se não for erro de rede, manter dialog aberto para o usuário tentar novamente
+        // Não fechar dialog para permitir nova tentativa
       }
     } finally {
       setIsSubmitting(false);
