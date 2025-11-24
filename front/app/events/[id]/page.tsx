@@ -174,7 +174,12 @@ export default function EventDetailsPage() {
       // Se não encontrou cache em lugar nenhum
       toast.error(error.message || 'Erro ao carregar evento');
       setTimeout(() => {
-        router.push('/events');
+        // Usar window.location quando offline para evitar RSC
+        if (typeof window !== 'undefined' && !navigator.onLine) {
+          window.location.href = '/events';
+        } else {
+          router.push('/events');
+        }
       }, 2000);
     } finally {
       setIsLoading(false);
@@ -194,7 +199,11 @@ export default function EventDetailsPage() {
   const handleInscription = async () => {
     if (!session) {
       toast.error('Você precisa estar logado para se inscrever');
-      router.push('/login');
+      if (typeof window !== 'undefined' && !navigator.onLine) {
+        window.location.href = '/login';
+      } else {
+        router.push('/login');
+      }
       return;
     }
     try {
@@ -202,12 +211,20 @@ export default function EventDetailsPage() {
       await inscriptionApi.inscrever(params.id as string);
       toast.success('Inscrição realizada com sucesso!');
       setIsInscribed(true);
-      router.refresh();
+      
+      // Só fazer refresh se estiver online (evita RSC quando offline)
+      if (typeof window !== 'undefined' && navigator.onLine) {
+        router.refresh();
+      }
     } catch (error: any) {
       console.error('Erro ao inscrever:', error);
       if (error.response?.status === 403 || error.response?.status === 401) {
         toast.error('Sessão expirada. Por favor, faça login novamente.');
-        router.push('/login');
+        if (typeof window !== 'undefined' && !navigator.onLine) {
+          window.location.href = '/login';
+        } else {
+          router.push('/login');
+        }
       } else {
       toast.error(error.response?.data?.message || 'Erro ao se inscrever');
       }
@@ -222,7 +239,11 @@ export default function EventDetailsPage() {
       await inscriptionApi.cancelarInscricao(params.id as string);
       toast.success('Inscrição cancelada com sucesso!');
       setIsInscribed(false);
-      router.refresh();
+      
+      // Só fazer refresh se estiver online (evita RSC quando offline)
+      if (typeof window !== 'undefined' && navigator.onLine) {
+        router.refresh();
+      }
     } catch (error: any) {
       toast.error('Erro ao cancelar inscrição');
     } finally {
@@ -241,7 +262,15 @@ export default function EventDetailsPage() {
       toast.success('Usuário cadastrado, inscrito e presença confirmada!');
       setIsQuickRegisterOpen(false);
       reset();
-      router.refresh();
+      
+      // Só fazer refresh se estiver online (evita RSC quando offline)
+      if (typeof window !== 'undefined' && navigator.onLine) {
+        router.refresh();
+      } else {
+        // Quando offline, apenas fechar o dialog e mostrar sucesso
+        // A operação já foi salva offline e será sincronizada quando voltar online
+        toast.info('Operação salva offline. Será sincronizada quando a conexão voltar.');
+      }
     } catch (error: any) {
       toast.error(error.response?.data?.message || 'Erro ao cadastrar usuário');
     } finally {
