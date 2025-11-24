@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { SessionProvider } from "@/components/providers/SessionProvider";
 import { PreloadProvider } from "@/components/providers/PreloadProvider";
+import { ServiceWorkerProvider } from "@/components/providers/ServiceWorkerProvider";
 import { Toaster } from "@/components/ui/sonner";
 
 const geistSans = Geist({
@@ -31,9 +32,11 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         <SessionProvider>
-          <PreloadProvider>
-          {children}
-          </PreloadProvider>
+          <ServiceWorkerProvider>
+            <PreloadProvider>
+              {children}
+            </PreloadProvider>
+          </ServiceWorkerProvider>
           <Toaster />
         </SessionProvider>
       </body>

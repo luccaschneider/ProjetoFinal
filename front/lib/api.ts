@@ -59,10 +59,34 @@ export function getCacheKey(url: string, params?: any): string {
 // Interceptor para adicionar token JWT
 apiClient.interceptors.request.use(
   async (config) => {
-    // Se estiver offline, não fazer requisições (exceto se for operação offline)
-    // Isso evita tentativas de requisição que causam erros
+    // Se estiver offline, verificar cache ANTES de fazer requisição
     if (typeof window !== 'undefined' && !navigator.onLine) {
-      // Permitir que o erro seja tratado pelo mutateWithOffline
+      // Para requisições GET, tentar usar cache primeiro
+      if (config.method === 'get' || config.method === 'GET') {
+        const cacheKey = getCacheKey(config.url || '', config.params);
+        const cached = getCache(cacheKey);
+        
+        if (cached !== null) {
+          // Retornar uma resposta simulada com dados do cache
+          // Isso evita que a requisição seja feita
+          const mockResponse = {
+            data: cached,
+            status: 200,
+            statusText: 'OK (from cache)',
+            headers: {},
+            config: config,
+          };
+          
+          // Rejeitar com uma resposta especial que será tratada
+          return Promise.reject({
+            isCacheHit: true,
+            cachedData: cached,
+            config: config,
+          } as any);
+        }
+      }
+      
+      // Para requisições POST/PUT/DELETE offline, deixar passar para mutateWithOffline tratar
       // Não bloquear aqui, deixar o erro ser lançado para ser tratado
     }
     
@@ -149,7 +173,18 @@ apiClient.interceptors.response.use(
     }
     return response;
   },
-  async (error: AxiosError) => {
+  async (error: any) => {
+    // Se for um cache hit do interceptor de request, retornar dados do cache
+    if (error.isCacheHit && error.cachedData) {
+      return {
+        data: error.cachedData,
+        status: 200,
+        statusText: 'OK (from cache)',
+        headers: {},
+        config: error.config,
+      };
+    }
+    
     // Não redirecionar se estiver offline (erro de rede)
     const isOffline = typeof window !== 'undefined' && !navigator.onLine;
     const isNetworkErr = isNetworkError(error);

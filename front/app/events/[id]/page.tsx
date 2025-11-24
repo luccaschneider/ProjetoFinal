@@ -301,16 +301,8 @@ export default function EventDetailsPage() {
       reset();
       toast.success('Usuário cadastrado, inscrito e presença confirmada!');
       
-      // Fazer refresh apenas se ainda estiver online
-      if (typeof window !== 'undefined' && navigator.onLine) {
-        // Usar setTimeout para garantir que o dialog feche antes
-        setTimeout(() => {
-          // Verificar novamente se ainda está online antes de fazer refresh
-          if (typeof window !== 'undefined' && navigator.onLine) {
-            router.refresh();
-          }
-        }, 200);
-      }
+      // NÃO fazer refresh automaticamente - deixar o usuário decidir quando atualizar
+      // Isso evita problemas quando a conexão está instável
     } catch (error: any) {
       // Se for erro de rede, pode ter ficado offline durante a requisição
       const isNetworkErr = typeof window !== 'undefined' && (
