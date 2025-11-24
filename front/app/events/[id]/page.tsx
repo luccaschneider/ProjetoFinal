@@ -60,7 +60,7 @@ export default function EventDetailsPage() {
       loadEvent();
       
       // Só verificar inscrição se estiver online e autenticado
-      if (navigator.onLine && session) {
+      if (typeof window !== 'undefined' && navigator.onLine && session) {
         checkInscription();
       }
     }
@@ -68,7 +68,7 @@ export default function EventDetailsPage() {
 
   const isNetworkError = (error: any): boolean => {
     return (
-      !navigator.onLine ||
+      (typeof window !== 'undefined' && !navigator.onLine) ||
       error.code === 'ERR_NETWORK' ||
       error.message === 'Network Error' ||
       (error.response === undefined && error.request !== undefined)
@@ -111,7 +111,7 @@ export default function EventDetailsPage() {
         setIsLoading(false);
         
         // Se estiver offline, usar cache e não tentar requisição
-        if (!navigator.onLine) {
+        if (typeof window !== 'undefined' && !navigator.onLine) {
           toast.info('Offline: Exibindo dados do cache');
           return;
         }
@@ -133,14 +133,12 @@ export default function EventDetailsPage() {
       }
       
       // Se não encontrou cache e está offline, mostrar erro
-      if (!navigator.onLine) {
+      if (typeof window !== 'undefined' && !navigator.onLine) {
         toast.error('Sem conexão e sem dados em cache para este evento');
         setIsLoading(false);
         // Usar window.location para evitar RSC quando offline
         setTimeout(() => {
-          if (typeof window !== 'undefined') {
-            window.location.href = '/events';
-          }
+          window.location.href = '/events';
         }, 2000);
         return;
       }

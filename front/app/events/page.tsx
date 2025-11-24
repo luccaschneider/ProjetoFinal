@@ -17,11 +17,17 @@ import { formatCurrency } from '@/lib/utils';
 export default function EventsPage() {
   const [events, setEvents] = useState<EventResponseDTO[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [isOnline, setIsOnline] = useState(true); // Default para true (assumir online no SSR)
   const preloadedEventIdsRef = useRef<Set<string>>(new Set());
 
-  // Monitorar status de rede
+  // Monitorar status de rede (apenas no cliente)
   useEffect(() => {
+    // Verificar se estamos no cliente
+    if (typeof window === 'undefined') return;
+    
+    // Inicializar com o status atual
+    setIsOnline(navigator.onLine);
+    
     const handleOnline = () => setIsOnline(true);
     const handleOffline = () => setIsOnline(false);
     
@@ -46,7 +52,7 @@ export default function EventsPage() {
       
       // Pré-carregar detalhes de TODOS os eventos IMEDIATAMENTE em background
       // Isso garante que os detalhes estejam em cache quando o usuário acessar
-      if (data.length > 0 && navigator.onLine) {
+      if (data.length > 0 && typeof window !== 'undefined' && navigator.onLine) {
         // Verificar quais eventos ainda não foram pré-carregados
         const eventsToPreload = data.filter(event => !preloadedEventIdsRef.current.has(event.id));
         
@@ -56,7 +62,7 @@ export default function EventsPage() {
         }
       }
     } catch (error: any) {
-      if (!navigator.onLine) {
+      if (typeof window !== 'undefined' && !navigator.onLine) {
         toast.warning('Sem conexão. Exibindo eventos em cache.');
       } else {
         toast.error('Erro ao carregar eventos');
