@@ -11,7 +11,14 @@ if (!secret) {
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
 
+// Configurar URL base para NextAuth
+const AUTH_URL = process.env.AUTH_URL || process.env.NEXTAUTH_URL || process.env.NEXT_PUBLIC_APP_URL;
+
 const config = {
+  // Confiar no host em produção (necessário para IPs e domínios customizados)
+  trustHost: true,
+  // URL base do servidor (opcional, mas recomendado)
+  ...(AUTH_URL && { basePath: undefined }), // NextAuth detecta automaticamente se AUTH_URL estiver definido
   providers: [
     CredentialsProvider({
       name: 'Credentials',
