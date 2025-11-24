@@ -16,3 +16,4 @@ CREATE INDEX idx_event_attendance_event ON event_attendance(event_id);
 CREATE INDEX idx_event_attendance_presente ON event_attendance(presente);
 
 
+

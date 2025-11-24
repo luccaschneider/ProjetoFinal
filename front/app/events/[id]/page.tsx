@@ -61,14 +61,48 @@ export default function EventDetailsPage() {
     }
   }, [params.id, session]);
 
+  const isNetworkError = (error: any): boolean => {
+    return (
+      !navigator.onLine ||
+      error.code === 'ERR_NETWORK' ||
+      error.message === 'Network Error' ||
+      (error.response === undefined && error.request !== undefined)
+    );
+  };
+
   const loadEvent = async () => {
     try {
       setIsLoading(true);
       const data = await eventApi.getById(params.id as string);
       setEvent(data);
-    } catch (error) {
-      toast.error('Erro ao carregar evento');
-      router.push('/events');
+    } catch (error: any) {
+      console.error('Erro ao carregar evento:', error);
+      // Se for erro de rede/offline, tentar buscar do cache diretamente
+      if (error.message?.includes('cache') || error.message?.includes('acessível') || isNetworkError(error)) {
+        const { getCache } = await import('@/lib/cacheService');
+        // Tentar diferentes formatos de chave
+        const possibleKeys = [
+          `api_events_${params.id}`,
+          `events_${params.id}`,
+          `event_${params.id}`,
+        ];
+        
+        for (const key of possibleKeys) {
+          const cached = getCache<EventResponseDTO>(key);
+          if (cached) {
+            console.log(`[Cache] Encontrado evento no cache com chave: ${key}`, cached);
+            setEvent(cached);
+            toast.warning('Offline: Exibindo dados do cache');
+            return;
+          }
+        }
+        console.warn('[Cache] Nenhum cache encontrado para o evento:', params.id);
+      }
+      toast.error(error.message || 'Erro ao carregar evento');
+      // Não redirecionar imediatamente, deixar o usuário ver a mensagem
+      setTimeout(() => {
+        router.push('/events');
+      }, 2000);
     } finally {
       setIsLoading(false);
     }
@@ -86,6 +120,7 @@ export default function EventDetailsPage() {
 
   const handleInscription = async () => {
     if (!session) {
+      toast.error('Você precisa estar logado para se inscrever');
       router.push('/login');
       return;
     }
@@ -96,7 +131,13 @@ export default function EventDetailsPage() {
       setIsInscribed(true);
       router.refresh();
     } catch (error: any) {
-      toast.error(error.response?.data?.message || 'Erro ao se inscrever');
+      console.error('Erro ao inscrever:', error);
+      if (error.response?.status === 403 || error.response?.status === 401) {
+        toast.error('Sessão expirada. Por favor, faça login novamente.');
+        router.push('/login');
+      } else {
+        toast.error(error.response?.data?.message || 'Erro ao se inscrever');
+      }
     } finally {
       setIsSubmitting(false);
     }

@@ -12,3 +12,4 @@ CREATE INDEX idx_event_inscription_usuario ON event_inscription(usuario_id);
 CREATE INDEX idx_event_inscription_event ON event_inscription(event_id);
 
 
+

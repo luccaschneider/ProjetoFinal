@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import Link from 'next/link';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -17,6 +17,7 @@ import { formatCurrency } from '@/lib/utils';
 export default function EventsPage() {
   const [events, setEvents] = useState<EventResponseDTO[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const preloadedEventIdsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     loadEvents();
@@ -27,6 +28,16 @@ export default function EventsPage() {
       setIsLoading(true);
       const data = await eventApi.listAll();
       setEvents(data);
+      
+      // Pré-carregar detalhes de todos os eventos em background (sempre que houver eventos)
+      if (data.length > 0 && navigator.onLine) {
+        // Verificar quais eventos ainda não foram pré-carregados
+        const eventsToPreload = data.filter(event => !preloadedEventIdsRef.current.has(event.id));
+        
+        if (eventsToPreload.length > 0) {
+          preloadEventDetails(eventsToPreload);
+        }
+      }
     } catch (error: any) {
       if (!navigator.onLine) {
         toast.warning('Sem conexão. Exibindo eventos em cache.');
@@ -36,6 +47,44 @@ export default function EventsPage() {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const preloadEventDetails = async (eventsList: EventResponseDTO[]) => {
+    // Não bloquear a UI - executar em background
+    setTimeout(async () => {
+      try {
+        console.log(`Iniciando pré-carregamento de detalhes de ${eventsList.length} eventos...`);
+        
+        // Processar em lotes para não sobrecarregar
+        const batchSize = 5;
+        for (let i = 0; i < eventsList.length; i += batchSize) {
+          const batch = eventsList.slice(i, i + batchSize);
+          await Promise.all(
+            batch.map((event) =>
+              eventApi.getById(event.id)
+                .then(() => {
+                  // Marcar como pré-carregado
+                  preloadedEventIdsRef.current.add(event.id);
+                  return null;
+                })
+                .catch((error) => {
+                  console.warn(`Erro ao pré-carregar evento ${event.id}:`, error);
+                  return null;
+                })
+          )
+          );
+          
+          // Pequeno delay entre lotes para não sobrecarregar
+          if (i + batchSize < eventsList.length) {
+            await new Promise((resolve) => setTimeout(resolve, 100));
+          }
+        }
+        
+        console.log(`✓ Pré-carregamento concluído: ${eventsList.length} eventos`);
+      } catch (error) {
+        console.error('Erro no pré-carregamento de detalhes:', error);
+      }
+    }, 500); // Pequeno delay para não bloquear o carregamento inicial
   };
 
   if (isLoading) {

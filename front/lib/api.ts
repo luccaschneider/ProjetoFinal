@@ -35,7 +35,13 @@ let tokenPromise: Promise<string | null> | null = null;
  * Gera uma chave de cache baseada na URL e parâmetros
  */
 function getCacheKey(url: string, params?: any): string {
-  let key = url.replace(API_BASE_URL, '').replace(/^\//, '');
+  // Remover a base URL se estiver presente
+  let key = url;
+  if (key.startsWith(API_BASE_URL)) {
+    key = key.replace(API_BASE_URL, '');
+  }
+  // Remover barra inicial se houver
+  key = key.replace(/^\//, '');
   
   if (params) {
     const paramStr = new URLSearchParams(params).toString();
@@ -44,8 +50,10 @@ function getCacheKey(url: string, params?: any): string {
     }
   }
   
-  // Normalizar a chave
-  return key.replace(/\//g, '_').replace(/\?/g, '_').replace(/&/g, '_');
+  // Normalizar a chave: substituir / por _ e remover caracteres especiais
+  key = key.replace(/\//g, '_').replace(/\?/g, '_').replace(/&/g, '_').replace(/=/g, '_');
+  
+  return key;
 }
 
 // Interceptor para adicionar token JWT
@@ -74,8 +82,15 @@ apiClient.interceptors.request.use(
             token,
             timestamp: Date.now(),
           };
+          
+          // Log para debug (remover em produção)
+          if (!token && typeof window !== 'undefined' && window.location.hostname === 'localhost') {
+            console.warn('Token não encontrado na sessão. Verifique se está autenticado.');
+          }
+          
           return token;
         } catch (error) {
+          console.error('Erro ao obter sessão:', error);
           tokenCache = {
             token: null,
             timestamp: Date.now(),
@@ -90,6 +105,11 @@ apiClient.interceptors.request.use(
     const token = await tokenPromise;
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
+    } else {
+      // Se não houver token e não for rota pública, pode causar 403
+      if (typeof window !== 'undefined' && window.location.hostname === 'localhost') {
+        console.warn('Requisição sem token JWT:', config.url);
+      }
     }
 
     return config;
@@ -109,10 +129,20 @@ apiClient.interceptors.response.use(
     }
     return response;
   },
-  (error: AxiosError) => {
-    if (error.response?.status === 401) {
-      // Token expirado ou inválido
-      window.location.href = '/login';
+  async (error: AxiosError) => {
+    if (error.response?.status === 401 || error.response?.status === 403) {
+      // Token expirado, inválido ou sem permissão
+      // Limpar cache do token
+      tokenCache = null;
+      tokenPromise = null;
+      
+      // Se for 401 ou 403, redirecionar para login
+      if (typeof window !== 'undefined') {
+        // Verificar se não está já na página de login
+        if (!window.location.pathname.includes('/login')) {
+          window.location.href = '/login';
+        }
+      }
     }
     return Promise.reject(error);
   }
@@ -138,9 +168,11 @@ async function getWithCache<T>(
   cacheKey: string,
   fetcher: () => Promise<T>
 ): Promise<T> {
-  // Se estiver offline, tentar usar cache
+  // Sempre verificar cache primeiro (mesmo online, para performance)
+  const cached = getCache<T>(cacheKey);
+  
+  // Se estiver offline, usar cache se disponível
   if (!navigator.onLine) {
-    const cached = getCache<T>(cacheKey);
     if (cached !== null) {
       return cached;
     }
@@ -150,14 +182,21 @@ async function getWithCache<T>(
   
   // Se estiver online, tentar fazer requisição primeiro
   try {
-    return await fetcher();
+    const data = await fetcher();
+    // Cache será atualizado automaticamente pelo interceptor
+    return data;
   } catch (error: any) {
-    // Se falhar, tentar usar cache como fallback
-    const cached = getCache<T>(cacheKey);
+    // Se falhar (backend offline, erro de rede, etc), tentar usar cache como fallback
     if (cached !== null) {
-      console.warn('Usando cache devido a erro na requisição:', error);
+      console.warn(`[Cache] Usando cache devido a erro na requisição:`, cacheKey);
       return cached;
     }
+    
+    // Verificar se é erro de rede/backend offline
+    if (isNetworkError(error)) {
+      throw new Error('Backend não está acessível e não há dados em cache');
+    }
+    
     // Se não houver cache, propagar o erro
     throw error;
   }
@@ -284,23 +323,27 @@ export const authApi = {
 // Event APIs
 export const eventApi = {
   listAll: async (): Promise<EventResponseDTO[]> => {
+    const url = '/api/events';
+    const cacheKey = getCacheKey(url);
     return getWithCache(
-      '/api/events',
-      'events',
+      url,
+      cacheKey,
       async () => {
-    const response = await apiClient.get<EventResponseDTO[]>('/api/events');
-    return response.data;
+        const response = await apiClient.get<EventResponseDTO[]>(url);
+        return response.data;
       }
     );
   },
   
   getById: async (id: string): Promise<EventResponseDTO> => {
+    const url = `/api/events/${id}`;
+    const cacheKey = getCacheKey(url);
     return getWithCache(
-      `/api/events/${id}`,
-      `event_${id}`,
+      url,
+      cacheKey,
       async () => {
-    const response = await apiClient.get<EventResponseDTO>(`/api/events/${id}`);
-    return response.data;
+        const response = await apiClient.get<EventResponseDTO>(url);
+        return response.data;
       }
     );
   },

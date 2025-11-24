@@ -7,6 +7,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { PasswordInput } from '@/components/ui/password-input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Navbar } from '@/components/layout/Navbar';
@@ -14,13 +15,19 @@ import { authApi } from '@/lib/api';
 import { toast } from 'sonner';
 import Link from 'next/link';
 
-const registerSchema = z.object({
-  name: z.string().min(2, 'Nome deve ter no mínimo 2 caracteres'),
-  email: z.string().email('Email inválido'),
-  password: z.string().min(6, 'Senha deve ter no mínimo 6 caracteres'),
-  telefone: z.string().optional(),
-  documento: z.string().optional(),
-});
+const registerSchema = z
+  .object({
+    name: z.string().min(2, 'Nome deve ter no mínimo 2 caracteres'),
+    email: z.string().email('Email inválido'),
+    password: z.string().min(6, 'Senha deve ter no mínimo 6 caracteres'),
+    confirmPassword: z.string().min(6, 'Confirmação de senha é obrigatória'),
+    telefone: z.string().optional(),
+    documento: z.string().optional(),
+  })
+  .refine((data) => data.password === data.confirmPassword, {
+    message: 'As senhas não coincidem',
+    path: ['confirmPassword'],
+  });
 
 type RegisterForm = z.infer<typeof registerSchema>;
 
@@ -38,7 +45,9 @@ export default function RegisterPage() {
   const onSubmit = async (data: RegisterForm) => {
     setIsLoading(true);
     try {
-      await authApi.register(data);
+      // Remover confirmPassword antes de enviar
+      const { confirmPassword, ...registerData } = data;
+      await authApi.register(registerData);
       toast.success('Cadastro realizado com sucesso!');
       router.push('/login');
     } catch (error: any) {
@@ -85,14 +94,24 @@ export default function RegisterPage() {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="password">Senha</Label>
-                  <Input
+                  <PasswordInput
                     id="password"
-                    type="password"
                     placeholder="••••••••"
                     {...register('password')}
                   />
                   {errors.password && (
                     <p className="text-sm text-destructive">{errors.password.message}</p>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="confirmPassword">Confirmar Senha</Label>
+                  <PasswordInput
+                    id="confirmPassword"
+                    placeholder="••••••••"
+                    {...register('confirmPassword')}
+                  />
+                  {errors.confirmPassword && (
+                    <p className="text-sm text-destructive">{errors.confirmPassword.message}</p>
                   )}
                 </div>
                 <div className="space-y-2">

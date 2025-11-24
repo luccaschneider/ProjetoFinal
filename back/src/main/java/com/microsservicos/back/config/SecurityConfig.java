@@ -48,11 +48,15 @@ public class SecurityConfig {
                 // Endpoint público de validação de certificados
                 auth.requestMatchers(HttpMethod.GET, "/api/certificates/validate/**").permitAll();
                 
-                // Endpoints de inscrição em eventos requerem autenticação (devem vir antes das rotas públicas)
-                auth.requestMatchers("/api/events/*/inscricao", "/api/events/inscricoes").authenticated();
-                
                 // Permitir apenas GETs nas rotas de eventos (consultas públicas)
                 auth.requestMatchers(HttpMethod.GET, "/api/events/**").permitAll();
+                
+                // Endpoints de inscrição em eventos requerem autenticação (devem vir depois dos GETs públicos)
+                // Padrão: /api/events/{uuid}/inscricao - usar * para capturar um segmento (UUID)
+                auth.requestMatchers(HttpMethod.POST, "/api/events/*/inscricao").authenticated();
+                auth.requestMatchers(HttpMethod.DELETE, "/api/events/*/inscricao").authenticated();
+                auth.requestMatchers(HttpMethod.GET, "/api/events/inscricoes").authenticated();
+                auth.requestMatchers(HttpMethod.GET, "/api/events/presencas").authenticated();
                 
                 // Permitir rotas públicas configuráveis
                 List<String> publicRoutes = securityProperties.getPublicRoutes();
