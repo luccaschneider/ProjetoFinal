@@ -129,10 +129,23 @@ apiClient.interceptors.request.use(
 // Interceptor para cachear respostas GET e tratar erros
 apiClient.interceptors.response.use(
   (response) => {
-    // Cachear apenas respostas GET bem-sucedidas
-    if (response.config.method === 'get' && response.config.url) {
-      const cacheKey = getCacheKey(response.config.url, response.config.params);
-      setCache(cacheKey, response.data);
+    // Cachear TODAS as respostas GET bem-sucedidas automaticamente
+    // Isso garante que qualquer requisição GET seja cacheada, mesmo que não use getWithCache
+    // EXCETO blobs (arquivos binários) que não devem ser cacheados
+    if ((response.config.method === 'get' || response.config.method === 'GET') && 
+        response.config.responseType !== 'blob' && 
+        response.config.url) {
+      try {
+        const cacheKey = getCacheKey(response.config.url, response.config.params);
+        // Só cachear se os dados forem serializáveis (não blobs)
+        if (typeof response.data !== 'string' || !response.data.startsWith('blob:')) {
+          setCache(cacheKey, response.data);
+          console.debug(`[Cache] 💾 Cacheado automaticamente: ${cacheKey}`);
+        }
+      } catch (error) {
+        // Se houver erro ao cachear (ex: dados muito grandes), apenas logar
+        console.debug(`[Cache] ⚠️ Não foi possível cachear: ${response.config.url}`, error);
+      }
     }
     return response;
   },
@@ -180,26 +193,53 @@ function isNetworkError(error: any): boolean {
 
 /**
  * Wrapper para requisições GET com cache-first
+ * Prioriza cache quando offline e sempre verifica cache primeiro
  */
 async function getWithCache<T>(
   url: string,
   cacheKey: string,
-  fetcher: () => Promise<T>
+  fetcher: () => Promise<T>,
+  forceRefresh: boolean = false
 ): Promise<T> {
+  // Se estiver offline, SEMPRE usar cache se disponível
+  if (typeof window !== 'undefined' && !navigator.onLine) {
+    const cached = getCache<T>(cacheKey);
+    if (cached !== null) {
+      console.log(`[Cache] ✅ Offline - Usando cache: ${cacheKey}`);
+      return cached;
+    }
+    // Se offline e sem cache, lançar erro amigável
+    throw new Error('Sem conexão e sem dados em cache para esta requisição');
+  }
+  
+  // Se forçar refresh, fazer requisição direta
+  if (forceRefresh) {
+    try {
+      const data = await fetcher();
+      return data;
+    } catch (error: any) {
+      // Se falhar ao forçar refresh, tentar usar cache como fallback
+      const cached = getCache<T>(cacheKey);
+      if (cached !== null) {
+        console.warn(`[Cache] ⚠️ Falha ao forçar refresh, usando cache: ${cacheKey}`);
+        return cached;
+      }
+      throw error;
+    }
+  }
+  
   // SEMPRE verificar cache primeiro (cache-first strategy)
   const cached = getCache<T>(cacheKey);
   
   // Se houver cache disponível, usar imediatamente (mesmo online)
-  // Isso garante que dados pré-carregados sejam usados
+  // Isso garante que dados pré-carregados sejam usados e melhora performance
   if (cached !== null) {
-    console.log(`[Cache] ✅ Usando cache disponível: ${cacheKey}`);
-    
     // Se estiver online, tentar atualizar em background (sem bloquear)
     if (typeof window !== 'undefined' && navigator.onLine) {
       fetcher()
         .then((data) => {
           // Cache será atualizado automaticamente pelo interceptor
-          console.log(`[Cache] ✅ Dados atualizados em background: ${cacheKey}`);
+          console.debug(`[Cache] ✅ Dados atualizados em background: ${cacheKey}`);
         })
         .catch((error) => {
           // Se falhar, manter o cache que já está sendo usado
@@ -209,11 +249,6 @@ async function getWithCache<T>(
     
     // Retornar cache imediatamente (não esperar atualização)
     return cached;
-  }
-  
-  // Se não houver cache e estiver offline, lançar erro
-  if (typeof window !== 'undefined' && !navigator.onLine) {
-    throw new Error('Sem conexão e sem dados em cache');
   }
   
   // Se não houver cache mas estiver online, fazer requisição
@@ -347,8 +382,16 @@ export const authApi = {
   },
   
   getMe: async (): Promise<UsuarioResponseDTO> => {
-    const response = await apiClient.get<UsuarioResponseDTO>('/api/auth/me');
-    return response.data;
+    const url = '/api/auth/me';
+    const cacheKey = getCacheKey(url);
+    return getWithCache(
+      url,
+      cacheKey,
+      async () => {
+        const response = await apiClient.get<UsuarioResponseDTO>(url);
+        return response.data;
+      }
+    );
   },
   
   updateProfile: async (data: UpdateProfileDTO): Promise<UsuarioResponseDTO> => {
@@ -487,8 +530,16 @@ export const certificateApi = {
   },
   
   validate: async (code: string): Promise<any> => {
-    const response = await apiClient.get(`/api/certificates/validate/${code}`);
-    return response.data;
+    const url = `/api/certificates/validate/${code}`;
+    const cacheKey = getCacheKey(url);
+    return getWithCache(
+      url,
+      cacheKey,
+      async () => {
+        const response = await apiClient.get(url);
+        return response.data;
+      }
+    );
   },
 };
 
@@ -497,8 +548,16 @@ export const logApi = {
   listMyLogs: async (page: number = 0, size: number = 20, action?: string): Promise<PageResponse<UserLogDTO>> => {
     const params = new URLSearchParams({ page: page.toString(), size: size.toString() });
     if (action) params.append('action', action);
-    const response = await apiClient.get<PageResponse<UserLogDTO>>(`/api/logs/my-logs?${params.toString()}`);
-    return response.data;
+    const url = `/api/logs/my-logs?${params.toString()}`;
+    const cacheKey = getCacheKey(url);
+    return getWithCache(
+      url,
+      cacheKey,
+      async () => {
+        const response = await apiClient.get<PageResponse<UserLogDTO>>(url);
+        return response.data;
+      }
+    );
   },
 };
 

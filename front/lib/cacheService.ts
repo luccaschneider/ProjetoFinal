@@ -7,13 +7,15 @@ interface CachedData {
 
 const CACHE_PREFIX = 'api_cache_';
 const DEFAULT_TTL: Record<string, number> = {
-  events: 60 * 60 * 1000, // 1 hora
-  event: 60 * 60 * 1000, // 1 hora
-  inscriptions: 30 * 60 * 1000, // 30 minutos
-  presences: 30 * 60 * 1000, // 30 minutos
-  usuarios: 30 * 60 * 1000, // 30 minutos
-  logs: 10 * 60 * 1000, // 10 minutos
-  default: 60 * 60 * 1000, // 1 hora padrão
+  events: 24 * 60 * 60 * 1000, // 24 horas (para funcionar offline por mais tempo)
+  event: 24 * 60 * 60 * 1000, // 24 horas
+  inscriptions: 12 * 60 * 60 * 1000, // 12 horas
+  presences: 12 * 60 * 60 * 1000, // 12 horas
+  usuarios: 12 * 60 * 60 * 1000, // 12 horas
+  logs: 6 * 60 * 60 * 1000, // 6 horas
+  auth: 12 * 60 * 60 * 1000, // 12 horas
+  certificates: 24 * 60 * 60 * 1000, // 24 horas
+  default: 24 * 60 * 60 * 1000, // 24 horas padrão (para funcionar offline por mais tempo)
 };
 
 /**
