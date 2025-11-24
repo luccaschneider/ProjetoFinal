@@ -140,7 +140,7 @@ apiClient.interceptors.response.use(
       if (typeof window !== 'undefined') {
         // Verificar se não está já na página de login
         if (!window.location.pathname.includes('/login')) {
-          window.location.href = '/login';
+      window.location.href = '/login';
         }
       }
     }
@@ -330,7 +330,7 @@ export const eventApi = {
       cacheKey,
       async () => {
         const response = await apiClient.get<EventResponseDTO[]>(url);
-        return response.data;
+    return response.data;
       }
     );
   },
@@ -343,7 +343,7 @@ export const eventApi = {
       cacheKey,
       async () => {
         const response = await apiClient.get<EventResponseDTO>(url);
-        return response.data;
+    return response.data;
       }
     );
   },

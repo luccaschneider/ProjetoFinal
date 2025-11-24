@@ -101,7 +101,7 @@ export default function EventDetailsPage() {
       toast.error(error.message || 'Erro ao carregar evento');
       // Não redirecionar imediatamente, deixar o usuário ver a mensagem
       setTimeout(() => {
-        router.push('/events');
+      router.push('/events');
       }, 2000);
     } finally {
       setIsLoading(false);
@@ -136,7 +136,7 @@ export default function EventDetailsPage() {
         toast.error('Sessão expirada. Por favor, faça login novamente.');
         router.push('/login');
       } else {
-        toast.error(error.response?.data?.message || 'Erro ao se inscrever');
+      toast.error(error.response?.data?.message || 'Erro ao se inscrever');
       }
     } finally {
       setIsSubmitting(false);

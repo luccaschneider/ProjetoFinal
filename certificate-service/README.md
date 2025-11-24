@@ -17,10 +17,32 @@ npm install
 
 ## Configuração
 
-Copie o arquivo `.env.example` para `.env` e configure as variáveis de ambiente:
+### Variáveis de Ambiente
+
+O serviço suporta diferentes arquivos de ambiente baseado no `NODE_ENV`:
+
+- **Desenvolvimento**: `.env.development` ou `.env`
+- **Produção**: `.env.production` ou `.env`
+
+Crie os arquivos `.env.development` e `.env.production` com as seguintes variáveis:
 
 ```bash
-cp .env.example .env
+# Variáveis necessárias
+NODE_ENV=development  # ou production
+PORT=3001
+ALLOWED_IP=localhost  # ou 177.44.248.82 em produção
+DB_HOST=localhost
+DB_PORT=5433
+DB_NAME=microsservicos_db
+DB_USER=postgres
+DB_PASSWORD=postgres
+JAVA_SERVICE_URL=http://localhost:8080  # ou http://177.44.248.82:8080 em produção
+```
+
+### Instalação de Dependências
+
+```bash
+npm install
 ```
 
 ## Execução
@@ -29,11 +51,24 @@ cp .env.example .env
 ```bash
 npm run dev
 ```
+- Usa `NODE_ENV=development`
+- Carrega variáveis de `.env.development` ou `.env`
+- Usa `nodemon` para hot-reload
+
+### Build (Validação)
+```bash
+npm run build
+```
+- Valida a sintaxe do código
+- Não requer compilação (serviço Node.js puro)
 
 ### Produção
 ```bash
 npm start
 ```
+- Usa `NODE_ENV=production`
+- Carrega variáveis de `.env.production` ou `.env`
+- Executa o servidor otimizado
 
 ## Endpoints
 

@@ -32,7 +32,7 @@ export default function RootLayout({
       >
         <SessionProvider>
           <PreloadProvider>
-            {children}
+          {children}
           </PreloadProvider>
           <Toaster />
         </SessionProvider>

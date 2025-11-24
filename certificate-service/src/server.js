@@ -1,6 +1,27 @@
 const express = require('express');
 const cors = require('cors');
-require('dotenv').config();
+const path = require('path');
+
+// Carregar variáveis de ambiente baseado no NODE_ENV
+// Primeiro tenta carregar o arquivo específico do ambiente, depois o .env genérico
+const env = process.env.NODE_ENV || 'development';
+const envFile = env === 'production' ? '.env.production' : '.env.development';
+
+// Tentar carregar arquivo específico do ambiente
+try {
+  require('dotenv').config({ path: path.resolve(__dirname, '..', envFile) });
+} catch (error) {
+  // Ignorar se o arquivo não existir
+}
+
+// Sempre carregar .env como fallback
+require('dotenv').config({ path: path.resolve(__dirname, '..', '.env') });
+
+// Log do ambiente atual (apenas em desenvolvimento)
+if (env === 'development') {
+  console.log(`🔧 Ambiente: ${env}`);
+  console.log(`📁 Arquivo de env: ${envFile}`);
+}
 
 const certificateRoutes = require('./routes/certificateRoutes');
 const { swaggerSpec, swaggerUi } = require('./config/swagger');
@@ -85,9 +106,11 @@ app.use((err, req, res, next) => {
 
 // Iniciar servidor
 app.listen(PORT, () => {
-  console.log(`Servidor rodando na porta ${PORT}`);
-  console.log(`Documentação disponível em http://localhost:${PORT}/api-docs`);
-  console.log(`IP permitido para CORS: ${ALLOWED_IP}`);
+  console.log(`🚀 Servidor Certificate Service rodando na porta ${PORT}`);
+  console.log(`📚 Documentação disponível em http://localhost:${PORT}/api-docs`);
+  console.log(`🌐 IP permitido para CORS: ${ALLOWED_IP}`);
+  console.log(`🔧 Ambiente: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`🔗 Java Service URL: ${process.env.JAVA_SERVICE_URL || 'http://localhost:8080'}`);
 });
 
 module.exports = app;
