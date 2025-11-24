@@ -17,10 +17,19 @@ import { saveOperation } from './offlineStorage';
 import { toast } from 'sonner';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
+const CERTIFICATE_SERVICE_URL = process.env.NEXT_PUBLIC_CERTIFICATE_SERVICE_URL || 'http://localhost:3001';
 
-// Criar instância do axios
+// Criar instância do axios para o backend Java
 export const apiClient: AxiosInstance = axios.create({
   baseURL: API_BASE_URL,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
+
+// Criar instância do axios para o serviço de certificados (Node.js)
+export const certificateClient: AxiosInstance = axios.create({
+  baseURL: CERTIFICATE_SERVICE_URL,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -56,7 +65,7 @@ export function getCacheKey(url: string, params?: any): string {
   return key;
 }
 
-// Interceptor para adicionar token JWT
+// Interceptor para adicionar token JWT ao apiClient (backend Java)
 apiClient.interceptors.request.use(
   async (config) => {
     // Se estiver offline, verificar cache ANTES de fazer requisição
@@ -547,10 +556,103 @@ export const inscriptionApi = {
   },
 };
 
-// Certificate APIs
+// Interceptor para adicionar token JWT ao certificateClient (serviço Node.js)
+certificateClient.interceptors.request.use(
+  async (config) => {
+    // Evitar loop: não buscar token para requisições de sessão
+    if (config.url?.includes('/api/auth/session')) {
+      return config;
+    }
+
+    // Verificar cache
+    if (tokenCache && Date.now() - tokenCache.timestamp < TOKEN_CACHE_DURATION) {
+      if (tokenCache.token) {
+        config.headers.Authorization = `Bearer ${tokenCache.token}`;
+      }
+      return config;
+    }
+
+    // Evitar múltiplas chamadas simultâneas
+    if (!tokenPromise) {
+      tokenPromise = (async () => {
+        try {
+          const session = await getSession();
+          const token = session?.accessToken || null;
+          tokenCache = {
+            token,
+            timestamp: Date.now(),
+          };
+          
+          if (!token && typeof window !== 'undefined' && window.location.hostname === 'localhost') {
+            console.warn('Token não encontrado na sessão. Verifique se está autenticado.');
+          }
+          
+          return token;
+        } catch (error) {
+          console.error('Erro ao obter sessão:', error);
+          tokenCache = {
+            token: null,
+            timestamp: Date.now(),
+          };
+          return null;
+        } finally {
+          tokenPromise = null;
+        }
+      })();
+    }
+
+    const token = await tokenPromise;
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    } else {
+      if (typeof window !== 'undefined' && window.location.hostname === 'localhost') {
+        console.warn('Requisição sem token JWT:', config.url);
+      }
+    }
+
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
+  }
+);
+
+// Interceptor para cachear respostas GET do certificateClient
+certificateClient.interceptors.response.use(
+  (response) => {
+    // Cachear respostas GET bem-sucedidas
+    if ((response.config.method === 'get' || response.config.method === 'GET') && 
+        response.config.responseType !== 'blob' && 
+        response.config.url) {
+      try {
+        const cacheKey = getCacheKey(response.config.url, response.config.params);
+        if (typeof response.data !== 'string' || !response.data.startsWith('blob:')) {
+          setCache(cacheKey, response.data);
+          console.debug(`[Cache] 💾 Cacheado automaticamente (certificate): ${cacheKey}`);
+        }
+      } catch (error) {
+        console.debug(`[Cache] ⚠️ Não foi possível cachear: ${response.config.url}`, error);
+      }
+    }
+    return response;
+  },
+  async (error: AxiosError) => {
+    // Tratar erros de autenticação
+    if (error.response?.status === 401 || error.response?.status === 403) {
+      tokenCache = null;
+      tokenPromise = null;
+      if (typeof window !== 'undefined' && !window.location.pathname.includes('/login')) {
+        window.location.href = '/login';
+      }
+    }
+    return Promise.reject(error);
+  }
+);
+
+// Certificate APIs - Usa certificateClient (porta 3001)
 export const certificateApi = {
   generate: async (eventId: string, usuarioId: string): Promise<{ certificateCode: string; downloadUrl: string }> => {
-    const response = await apiClient.post<{ certificateCode: string; downloadUrl: string }>(
+    const response = await certificateClient.post<{ certificateCode: string; downloadUrl: string }>(
       '/api/certificates/generate',
       { eventId, usuarioId }
     );
@@ -558,7 +660,7 @@ export const certificateApi = {
   },
   
   download: async (code: string): Promise<Blob> => {
-    const response = await apiClient.get(`/api/certificates/download/${code}`, {
+    const response = await certificateClient.get(`/api/certificates/download/${code}`, {
       responseType: 'blob',
     });
     return response.data;
@@ -571,7 +673,7 @@ export const certificateApi = {
       url,
       cacheKey,
       async () => {
-        const response = await apiClient.get(url);
+        const response = await certificateClient.get(url);
         return response.data;
       }
     );
