@@ -59,6 +59,13 @@ export function getCacheKey(url: string, params?: any): string {
 // Interceptor para adicionar token JWT
 apiClient.interceptors.request.use(
   async (config) => {
+    // Se estiver offline, não fazer requisições (exceto se for operação offline)
+    // Isso evita tentativas de requisição que causam erros
+    if (typeof window !== 'undefined' && !navigator.onLine) {
+      // Permitir que o erro seja tratado pelo mutateWithOffline
+      // Não bloquear aqui, deixar o erro ser lançado para ser tratado
+    }
+    
     // Evitar loop: não buscar token para requisições de sessão
     if (config.url?.includes('/api/auth/session')) {
       return config;
@@ -130,17 +137,22 @@ apiClient.interceptors.response.use(
     return response;
   },
   async (error: AxiosError) => {
-    if (error.response?.status === 401 || error.response?.status === 403) {
+    // Não redirecionar se estiver offline (erro de rede)
+    const isOffline = typeof window !== 'undefined' && !navigator.onLine;
+    const isNetworkErr = isNetworkError(error);
+    
+    // Só tratar 401/403 se não for erro de rede/offline
+    if (!isNetworkErr && (error.response?.status === 401 || error.response?.status === 403)) {
       // Token expirado, inválido ou sem permissão
       // Limpar cache do token
       tokenCache = null;
       tokenPromise = null;
       
-      // Se for 401 ou 403, redirecionar para login
-      if (typeof window !== 'undefined') {
+      // Se for 401 ou 403, redirecionar para login (apenas se online)
+      if (typeof window !== 'undefined' && !isOffline) {
         // Verificar se não está já na página de login
         if (!window.location.pathname.includes('/login')) {
-      window.location.href = '/login';
+          window.location.href = '/login';
         }
       }
     }
