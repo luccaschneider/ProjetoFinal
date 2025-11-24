@@ -51,23 +51,46 @@ const corsOptions = {
       return callback(null, true);
     }
     
+    // Log para debug
+    console.log(`[CORS] Verificando origin: ${origin}`);
+    
     // Verificar se o origin está na lista permitida
     if (allowedOrigins.includes(origin) || origin.includes(ALLOWED_IP)) {
-      callback(null, true);
-    } else {
-      // Para desenvolvimento, permitir localhost
-      if (process.env.NODE_ENV === 'development') {
-        callback(null, true);
-      } else {
-        console.warn(`CORS bloqueado para origin: ${origin}`);
-        callback(new Error('Not allowed by CORS'));
+      console.log(`[CORS] ✅ Origin permitido: ${origin}`);
+      return callback(null, true);
+    }
+    
+    // Para produção, ser mais permissivo se o origin contém o IP permitido
+    if (process.env.NODE_ENV === 'production') {
+      // Em produção, aceitar qualquer origin que contenha o IP permitido
+      if (origin.includes(ALLOWED_IP)) {
+        console.log(`[CORS] ✅ Origin permitido (contém IP): ${origin}`);
+        return callback(null, true);
       }
+      // Também aceitar se for do mesmo domínio/IP (mesmo servidor)
+      try {
+        const originHost = new URL(origin).hostname;
+        if (originHost === ALLOWED_IP || originHost === 'localhost' || originHost === '127.0.0.1') {
+          console.log(`[CORS] ✅ Origin permitido (mesmo host): ${origin}`);
+          return callback(null, true);
+        }
+      } catch (e) {
+        // Se não conseguir parsear, continuar
+      }
+      console.warn(`[CORS] ⚠️ Origin bloqueado: ${origin}`);
+      callback(new Error('Not allowed by CORS'));
+    } else {
+      // Para desenvolvimento, permitir tudo
+      console.log(`[CORS] ✅ Origin permitido (desenvolvimento): ${origin}`);
+      callback(null, true);
     }
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept'],
   exposedHeaders: ['Authorization'],
+  preflightContinue: false,
+  optionsSuccessStatus: 204,
 };
 
 app.use(cors(corsOptions));
@@ -105,12 +128,14 @@ app.use((err, req, res, next) => {
 });
 
 // Iniciar servidor
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Servidor Certificate Service rodando na porta ${PORT}`);
   console.log(`📚 Documentação disponível em http://localhost:${PORT}/api-docs`);
   console.log(`🌐 IP permitido para CORS: ${ALLOWED_IP}`);
   console.log(`🔧 Ambiente: ${process.env.NODE_ENV || 'development'}`);
   console.log(`🔗 Java Service URL: ${process.env.JAVA_SERVICE_URL || 'http://localhost:8080'}`);
+  console.log(`🌍 Servidor acessível em: http://${ALLOWED_IP}:${PORT}`);
+  console.log(`📋 Origins permitidos:`, allowedOrigins.join(', '));
 });
 
 module.exports = app;
