@@ -52,14 +52,12 @@ export default function EventsPage() {
       
       // Pré-carregar detalhes de TODOS os eventos IMEDIATAMENTE em background
       // Isso garante que os detalhes estejam em cache quando o usuário acessar
+      // IMPORTANTE: Pré-carregar TODOS, mesmo que já tenham sido pré-carregados antes
       if (data.length > 0 && typeof window !== 'undefined' && navigator.onLine) {
-        // Verificar quais eventos ainda não foram pré-carregados
-        const eventsToPreload = data.filter(event => !preloadedEventIdsRef.current.has(event.id));
-        
-        if (eventsToPreload.length > 0) {
-          // Iniciar pré-carregamento imediatamente (sem delay)
-          preloadEventDetails(eventsToPreload);
-        }
+        // Pré-carregar TODOS os eventos (não verificar se já foram pré-carregados)
+        // Isso garante que os dados estejam sempre atualizados no cache
+        console.log(`🔄 Iniciando pré-carregamento de ${data.length} eventos...`);
+        preloadEventDetails(data);
       }
     } catch (error: any) {
       if (typeof window !== 'undefined' && !navigator.onLine) {
@@ -74,52 +72,52 @@ export default function EventsPage() {
 
   const preloadEventDetails = async (eventsList: EventResponseDTO[]) => {
     // Executar imediatamente em background (sem delay)
-    // Usar requestIdleCallback se disponível, senão usar setTimeout com delay mínimo
     const executePreload = async () => {
       try {
-        console.log(`🔄 Iniciando pré-carregamento de detalhes de ${eventsList.length} eventos...`);
+        console.log(`🔄 Iniciando pré-carregamento FORÇADO de detalhes de ${eventsList.length} eventos...`);
         
-        // Processar em lotes maiores e mais rápidos
-        const batchSize = 10; // Aumentar tamanho do lote
+        // Processar em lotes para não sobrecarregar
+        const batchSize = 5; // Lotes menores para garantir que todas as requisições sejam feitas
+        let successCount = 0;
+        
         for (let i = 0; i < eventsList.length; i += batchSize) {
           const batch = eventsList.slice(i, i + batchSize);
           
           // Executar todas as requisições em paralelo
-          await Promise.allSettled(
-            batch.map((event) =>
-              eventApi.getById(event.id)
-                .then(() => {
-                  // Marcar como pré-carregado
-                  preloadedEventIdsRef.current.add(event.id);
-                  return null;
-                })
-                .catch((error) => {
-                  // Não logar erro para não poluir console, apenas marcar como tentado
-                  console.debug(`Evento ${event.id} não pôde ser pré-carregado`);
-                  return null;
-                })
-            )
+          // IMPORTANTE: Forçar requisição mesmo que já tenha cache
+          const results = await Promise.allSettled(
+            batch.map(async (event) => {
+              try {
+                // Usar eventApi.getById com forceRefresh=true para forçar requisição
+                // Isso garante que os dados sejam sempre buscados do servidor e salvos no cache
+                await eventApi.getById(event.id, true);
+                
+                // Marcar como pré-carregado
+                preloadedEventIdsRef.current.add(event.id);
+                successCount++;
+                console.log(`✅ Pré-carregado (${successCount}/${eventsList.length}): ${event.nome}`);
+                return true;
+              } catch (error: any) {
+                console.debug(`⚠️ Evento ${event.id} não pôde ser pré-carregado:`, error.message);
+                return false;
+              }
+            })
           );
           
-          // Delay mínimo entre lotes (50ms) para não sobrecarregar
+          // Pequeno delay entre lotes para não sobrecarregar
           if (i + batchSize < eventsList.length) {
-            await new Promise((resolve) => setTimeout(resolve, 50));
+            await new Promise((resolve) => setTimeout(resolve, 200));
           }
         }
         
-        console.log(`✅ Pré-carregamento concluído: ${eventsList.length} eventos`);
+        console.log(`✅ Pré-carregamento concluído: ${successCount}/${eventsList.length} eventos carregados com sucesso`);
       } catch (error) {
         console.error('Erro no pré-carregamento de detalhes:', error);
       }
     };
     
-    // Executar imediatamente se possível, senão usar requestIdleCallback
-    if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
-      (window as any).requestIdleCallback(executePreload, { timeout: 1000 });
-    } else {
-      // Executar imediatamente (sem delay)
-      executePreload();
-    }
+    // Executar imediatamente (sem delay)
+    executePreload();
   };
 
   if (isLoading) {

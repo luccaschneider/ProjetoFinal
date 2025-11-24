@@ -19,7 +19,7 @@ import { toast } from 'sonner';
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
 
 // Criar instância do axios
-const apiClient: AxiosInstance = axios.create({
+export const apiClient: AxiosInstance = axios.create({
   baseURL: API_BASE_URL,
   headers: {
     'Content-Type': 'application/json',
@@ -177,7 +177,7 @@ async function getWithCache<T>(
     console.log(`[Cache] ✅ Usando cache disponível: ${cacheKey}`);
     
     // Se estiver online, tentar atualizar em background (sem bloquear)
-    if (navigator.onLine) {
+    if (typeof window !== 'undefined' && navigator.onLine) {
       fetcher()
         .then((data) => {
           // Cache será atualizado automaticamente pelo interceptor
@@ -194,7 +194,7 @@ async function getWithCache<T>(
   }
   
   // Se não houver cache e estiver offline, lançar erro
-  if (!navigator.onLine) {
+  if (typeof window !== 'undefined' && !navigator.onLine) {
     throw new Error('Sem conexão e sem dados em cache');
   }
   
@@ -354,15 +354,24 @@ export const eventApi = {
     );
   },
   
-  getById: async (id: string): Promise<EventResponseDTO> => {
+  getById: async (id: string, forceRefresh: boolean = false): Promise<EventResponseDTO> => {
     const url = `/api/events/${id}`;
     const cacheKey = getCacheKey(url);
+    
+    // Se forçar refresh, fazer requisição direta sem verificar cache
+    if (forceRefresh) {
+      const response = await apiClient.get<EventResponseDTO>(url);
+      // O interceptor já salva no cache, mas vamos garantir
+      setCache(cacheKey, response.data);
+      return response.data;
+    }
+    
     return getWithCache(
       url,
       cacheKey,
       async () => {
         const response = await apiClient.get<EventResponseDTO>(url);
-    return response.data;
+        return response.data;
       }
     );
   },
