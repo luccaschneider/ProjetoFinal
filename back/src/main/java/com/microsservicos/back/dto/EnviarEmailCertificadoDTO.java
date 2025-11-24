@@ -1,0 +1,22 @@
+package com.microsservicos.back.dto;
+
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import lombok.Data;
+
+import java.util.UUID;
+
+@Data
+public class EnviarEmailCertificadoDTO {
+    
+    @NotNull(message = "usuarioId é obrigatório")
+    private UUID usuarioId;
+    
+    @NotNull(message = "eventId é obrigatório")
+    private UUID eventId;
+    
+    @NotBlank(message = "certificateCode é obrigatório")
+    private String certificateCode;
+}
+
+
