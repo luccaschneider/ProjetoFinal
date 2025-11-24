@@ -73,35 +73,79 @@ export default function EventDetailsPage() {
   const loadEvent = async () => {
     try {
       setIsLoading(true);
+      
+      // SEMPRE verificar cache primeiro (especialmente importante quando offline)
+      const { getCache } = await import('@/lib/cacheService');
+      const { getCacheKey } = await import('@/lib/api');
+      
+      // Tentar diferentes formatos de chave de cache
+      const possibleKeys = [
+        getCacheKey(`/api/events/${params.id}`),
+        `api_events_${params.id}`,
+        `events_${params.id}`,
+        `event_${params.id}`,
+      ];
+      
+      // Verificar cache primeiro
+      for (const key of possibleKeys) {
+        const cached = getCache<EventResponseDTO>(key);
+        if (cached) {
+          console.log(`[Cache] Encontrado evento no cache com chave: ${key}`);
+          setEvent(cached);
+          setIsLoading(false);
+          
+          // Se estiver offline, usar cache e não tentar requisição
+          if (!navigator.onLine) {
+            toast.info('Offline: Exibindo dados do cache');
+            return;
+          }
+          
+          // Se estiver online, tentar atualizar em background (mas já mostrar cache)
+          // Continuar para fazer requisição e atualizar cache
+          break;
+        }
+      }
+      
+      // Se não encontrou cache e está offline, mostrar erro
+      if (!navigator.onLine) {
+        toast.error('Sem conexão e sem dados em cache para este evento');
+        setTimeout(() => {
+          router.push('/events');
+        }, 2000);
+        return;
+      }
+      
+      // Se estiver online, fazer requisição (pode atualizar cache ou usar cache como fallback)
       const data = await eventApi.getById(params.id as string);
       setEvent(data);
     } catch (error: any) {
       console.error('Erro ao carregar evento:', error);
-      // Se for erro de rede/offline, tentar buscar do cache diretamente
-      if (error.message?.includes('cache') || error.message?.includes('acessível') || isNetworkError(error)) {
-        const { getCache } = await import('@/lib/cacheService');
-        // Tentar diferentes formatos de chave
-        const possibleKeys = [
-          `api_events_${params.id}`,
-          `events_${params.id}`,
-          `event_${params.id}`,
-        ];
-        
-        for (const key of possibleKeys) {
-          const cached = getCache<EventResponseDTO>(key);
-          if (cached) {
-            console.log(`[Cache] Encontrado evento no cache com chave: ${key}`, cached);
-            setEvent(cached);
-            toast.warning('Offline: Exibindo dados do cache');
-            return;
-          }
+      
+      // Tentar buscar do cache como último recurso
+      const { getCache } = await import('@/lib/cacheService');
+      const { getCacheKey } = await import('@/lib/api');
+      
+      const possibleKeys = [
+        getCacheKey(`/api/events/${params.id}`),
+        `api_events_${params.id}`,
+        `events_${params.id}`,
+        `event_${params.id}`,
+      ];
+      
+      for (const key of possibleKeys) {
+        const cached = getCache<EventResponseDTO>(key);
+        if (cached) {
+          console.log(`[Cache] Usando cache após erro: ${key}`);
+          setEvent(cached);
+          toast.warning('Usando dados em cache devido a erro na requisição');
+          return;
         }
-        console.warn('[Cache] Nenhum cache encontrado para o evento:', params.id);
       }
+      
+      // Se não encontrou cache em lugar nenhum
       toast.error(error.message || 'Erro ao carregar evento');
-      // Não redirecionar imediatamente, deixar o usuário ver a mensagem
       setTimeout(() => {
-      router.push('/events');
+        router.push('/events');
       }, 2000);
     } finally {
       setIsLoading(false);

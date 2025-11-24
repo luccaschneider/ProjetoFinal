@@ -52,32 +52,35 @@ export function usePreloadData() {
           (Date.now() - parseInt(lastDetailsPreload, 10)) > PRELOAD_INTERVAL;
 
         if (shouldPreloadDetails && events.length > 0) {
-          // Carregar detalhes de TODOS os eventos (sem limite)
-          console.log(`Iniciando pré-carregamento de detalhes de ${events.length} eventos...`);
+          // Carregar detalhes de TODOS os eventos IMEDIATAMENTE
+          console.log(`🔄 Iniciando pré-carregamento de detalhes de ${events.length} eventos...`);
           
-          // Processar em lotes de 5 para não sobrecarregar
-          const batchSize = 5;
+          // Processar em lotes maiores e mais rápidos
+          const batchSize = 10; // Aumentar tamanho do lote
           for (let i = 0; i < events.length; i += batchSize) {
             const batch = events.slice(i, i + batchSize);
-            await Promise.all(
+            
+            // Usar Promise.allSettled para não parar em caso de erro
+            await Promise.allSettled(
               batch.map((event) =>
                 eventApi.getById(event.id).catch((error) => {
-                  console.warn(`Erro ao carregar detalhes do evento ${event.id}:`, error);
+                  // Não logar erro para não poluir console
+                  console.debug(`Evento ${event.id} não pôde ser pré-carregado`);
                   return null;
                 })
               )
             );
             
-            // Pequeno delay entre lotes
+            // Delay mínimo entre lotes (50ms) para não sobrecarregar
             if (i + batchSize < events.length) {
-              await new Promise((resolve) => setTimeout(resolve, 100));
+              await new Promise((resolve) => setTimeout(resolve, 50));
             }
           }
           
           localStorage.setItem(PRELOAD_DETAILS_KEY, Date.now().toString());
-          console.log(`✓ Carregados detalhes de todos os ${events.length} eventos`);
+          console.log(`✅ Carregados detalhes de todos os ${events.length} eventos`);
         } else {
-          console.log('Detalhes já pré-carregados recentemente, pulando...');
+          console.log('ℹ️ Detalhes já pré-carregados recentemente, pulando...');
         }
 
         // 3. Se o usuário estiver autenticado, carregar dados do usuário

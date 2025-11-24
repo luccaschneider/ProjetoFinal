@@ -34,7 +34,7 @@ let tokenPromise: Promise<string | null> | null = null;
 /**
  * Gera uma chave de cache baseada na URL e parâmetros
  */
-function getCacheKey(url: string, params?: any): string {
+export function getCacheKey(url: string, params?: any): string {
   // Remover a base URL se estiver presente
   let key = url;
   if (key.startsWith(API_BASE_URL)) {

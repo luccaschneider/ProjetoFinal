@@ -29,12 +29,14 @@ export default function EventsPage() {
       const data = await eventApi.listAll();
       setEvents(data);
       
-      // Pré-carregar detalhes de todos os eventos em background (sempre que houver eventos)
+      // Pré-carregar detalhes de TODOS os eventos IMEDIATAMENTE em background
+      // Isso garante que os detalhes estejam em cache quando o usuário acessar
       if (data.length > 0 && navigator.onLine) {
         // Verificar quais eventos ainda não foram pré-carregados
         const eventsToPreload = data.filter(event => !preloadedEventIdsRef.current.has(event.id));
         
         if (eventsToPreload.length > 0) {
+          // Iniciar pré-carregamento imediatamente (sem delay)
           preloadEventDetails(eventsToPreload);
         }
       }
@@ -50,16 +52,19 @@ export default function EventsPage() {
   };
 
   const preloadEventDetails = async (eventsList: EventResponseDTO[]) => {
-    // Não bloquear a UI - executar em background
-    setTimeout(async () => {
+    // Executar imediatamente em background (sem delay)
+    // Usar requestIdleCallback se disponível, senão usar setTimeout com delay mínimo
+    const executePreload = async () => {
       try {
-        console.log(`Iniciando pré-carregamento de detalhes de ${eventsList.length} eventos...`);
+        console.log(`🔄 Iniciando pré-carregamento de detalhes de ${eventsList.length} eventos...`);
         
-        // Processar em lotes para não sobrecarregar
-        const batchSize = 5;
+        // Processar em lotes maiores e mais rápidos
+        const batchSize = 10; // Aumentar tamanho do lote
         for (let i = 0; i < eventsList.length; i += batchSize) {
           const batch = eventsList.slice(i, i + batchSize);
-          await Promise.all(
+          
+          // Executar todas as requisições em paralelo
+          await Promise.allSettled(
             batch.map((event) =>
               eventApi.getById(event.id)
                 .then(() => {
@@ -68,23 +73,32 @@ export default function EventsPage() {
                   return null;
                 })
                 .catch((error) => {
-                  console.warn(`Erro ao pré-carregar evento ${event.id}:`, error);
+                  // Não logar erro para não poluir console, apenas marcar como tentado
+                  console.debug(`Evento ${event.id} não pôde ser pré-carregado`);
                   return null;
                 })
-          )
+            )
           );
           
-          // Pequeno delay entre lotes para não sobrecarregar
+          // Delay mínimo entre lotes (50ms) para não sobrecarregar
           if (i + batchSize < eventsList.length) {
-            await new Promise((resolve) => setTimeout(resolve, 100));
+            await new Promise((resolve) => setTimeout(resolve, 50));
           }
         }
         
-        console.log(`✓ Pré-carregamento concluído: ${eventsList.length} eventos`);
+        console.log(`✅ Pré-carregamento concluído: ${eventsList.length} eventos`);
       } catch (error) {
         console.error('Erro no pré-carregamento de detalhes:', error);
       }
-    }, 500); // Pequeno delay para não bloquear o carregamento inicial
+    };
+    
+    // Executar imediatamente se possível, senão usar requestIdleCallback
+    if (typeof window !== 'undefined' && 'requestIdleCallback' in window) {
+      (window as any).requestIdleCallback(executePreload, { timeout: 1000 });
+    } else {
+      // Executar imediatamente (sem delay)
+      executePreload();
+    }
   };
 
   if (isLoading) {
