@@ -164,10 +164,16 @@ apiClient.interceptors.response.use(
  * Verifica se é um erro de rede (offline)
  */
 function isNetworkError(error: any): boolean {
+  if (typeof window === 'undefined') {
+    return false; // No SSR, não é erro de rede
+  }
   return (
     !navigator.onLine ||
     error.code === 'ERR_NETWORK' ||
+    error.code === 'ERR_ADDRESS_UNREACHABLE' ||
     error.message === 'Network Error' ||
+    error.message?.includes('unreachable') ||
+    error.message?.includes('Failed to fetch') ||
     (error.response === undefined && error.request !== undefined)
   );
 }

@@ -255,6 +255,37 @@ export default function EventDetailsPage() {
     // Verificar se está offline ANTES de qualquer coisa
     const isOffline = typeof window !== 'undefined' && !navigator.onLine;
     
+    // Se estiver offline, fechar dialog IMEDIATAMENTE e salvar offline
+    if (isOffline) {
+      // Fechar dialog ANTES de qualquer coisa para evitar reload
+      setIsQuickRegisterOpen(false);
+      reset();
+      setIsSubmitting(true);
+      
+      // Usar setTimeout para garantir que o dialog feche antes de qualquer outra ação
+      setTimeout(async () => {
+        try {
+          // Tentar salvar offline (vai falhar a requisição mas salvar na fila)
+          await adminApi.cadastroRapido({
+            name: data.name,
+            email: data.email,
+            eventId: params.id as string,
+          });
+          // Se chegou aqui, foi salvo offline com sucesso
+          toast.success('Operação salva offline. Será sincronizada quando a conexão voltar.');
+        } catch (error: any) {
+          // O mutateWithOffline já salvou offline e mostrou mensagem
+          // Não fazer nada além de garantir que o dialog está fechado
+        } finally {
+          setIsSubmitting(false);
+        }
+      }, 0);
+      
+      // Retornar imediatamente - NÃO fazer mais nada quando offline
+      return;
+    }
+    
+    // Se está online, fazer requisição normalmente
     try {
       setIsSubmitting(true);
       
@@ -264,41 +295,40 @@ export default function EventDetailsPage() {
         eventId: params.id as string,
       });
       
-      // Fechar dialog e resetar form imediatamente (ANTES de qualquer outra ação)
+      // Fechar dialog e resetar form
       setIsQuickRegisterOpen(false);
       reset();
+      toast.success('Usuário cadastrado, inscrito e presença confirmada!');
       
-      // Mostrar mensagem de sucesso
-      if (isOffline) {
-        toast.success('Operação salva offline. Será sincronizada quando a conexão voltar.');
-        // NÃO fazer refresh quando offline - apenas fechar o dialog
-        return; // Retornar imediatamente para evitar qualquer outra ação
-      } else {
-        toast.success('Usuário cadastrado, inscrito e presença confirmada!');
-        // Só fazer refresh se estiver online (evita RSC quando offline)
+      // Fazer refresh apenas se ainda estiver online
+      if (typeof window !== 'undefined' && navigator.onLine) {
         // Usar setTimeout para garantir que o dialog feche antes
         setTimeout(() => {
+          // Verificar novamente se ainda está online antes de fazer refresh
           if (typeof window !== 'undefined' && navigator.onLine) {
             router.refresh();
           }
-        }, 100);
+        }, 200);
       }
     } catch (error: any) {
-      // Se for erro de rede e estiver offline, não mostrar erro
-      // O mutateWithOffline já salvou offline e mostrou mensagem
+      // Se for erro de rede, pode ter ficado offline durante a requisição
       const isNetworkErr = typeof window !== 'undefined' && (
         !navigator.onLine || 
         error.code === 'ERR_NETWORK' || 
+        error.code === 'ERR_ADDRESS_UNREACHABLE' ||
         error.message === 'Network Error' ||
+        error.message?.includes('unreachable') ||
         (error.response === undefined && error.request !== undefined)
       );
       
-      if (!isNetworkErr) {
-        toast.error(error.response?.data?.message || 'Erro ao cadastrar usuário');
-      } else {
-        // Se for erro de rede, garantir que o dialog feche mesmo assim
+      if (isNetworkErr) {
+        // Se ficou offline, fechar dialog e não fazer refresh
         setIsQuickRegisterOpen(false);
         reset();
+        // O mutateWithOffline já mostrou mensagem
+      } else {
+        toast.error(error.response?.data?.message || 'Erro ao cadastrar usuário');
+        // Se não for erro de rede, manter dialog aberto para o usuário tentar novamente
       }
     } finally {
       setIsSubmitting(false);
@@ -406,9 +436,12 @@ export default function EventDetailsPage() {
                     open={isQuickRegisterOpen} 
                     onOpenChange={(open) => {
                       // Controlar abertura/fechamento do dialog
-                      // Quando offline, não fazer nada além de fechar
+                      // Quando fechar, apenas atualizar estado - não fazer refresh
                       setIsQuickRegisterOpen(open);
+                      // Se estiver fechando e offline, garantir que não haja reload
+                      // Não fazer nada além de atualizar o estado
                     }}
+                    modal={true}
                   >
                     <DialogTrigger asChild>
                       <Button variant="outline">Cadastro Rápido</Button>
@@ -420,7 +453,14 @@ export default function EventDetailsPage() {
                           Cadastre um usuário, inscreva no evento e confirme presença automaticamente
                         </DialogDescription>
                       </DialogHeader>
-                      <form onSubmit={handleSubmit(handleQuickRegister)} className="space-y-4">
+                      <form 
+                        onSubmit={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          handleSubmit(handleQuickRegister)(e);
+                        }} 
+                        className="space-y-4"
+                      >
                         <div className="space-y-2">
                           <Label htmlFor="quick-name">Nome</Label>
                           <Input id="quick-name" {...register('name')} />
