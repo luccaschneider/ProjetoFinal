@@ -17,7 +17,22 @@ import { formatCurrency } from '@/lib/utils';
 export default function EventsPage() {
   const [events, setEvents] = useState<EventResponseDTO[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
   const preloadedEventIdsRef = useRef<Set<string>>(new Set());
+
+  // Monitorar status de rede
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
 
   useEffect(() => {
     loadEvents();
@@ -210,14 +225,30 @@ export default function EventsPage() {
                     )}
                   </div>
                   <Button 
-                    asChild 
+                    asChild={isOnline}
                     className="mt-auto w-full group/btn"
                     size="lg"
+                    onClick={!isOnline ? (e) => {
+                      e.preventDefault();
+                      // Usar window.location para evitar RSC quando offline
+                      window.location.href = `/events/${event.id}`;
+                    } : undefined}
                   >
-                    <Link href={`/events/${event.id}`} className="flex items-center justify-center gap-2">
-                      Ver Detalhes
-                      <ArrowRight className="h-4 w-4 group-hover/btn:translate-x-1 transition-transform" />
-                    </Link>
+                    {isOnline ? (
+                      <Link 
+                        href={`/events/${event.id}`} 
+                        prefetch={true}
+                        className="flex items-center justify-center gap-2"
+                      >
+                        Ver Detalhes
+                        <ArrowRight className="h-4 w-4 group-hover/btn:translate-x-1 transition-transform" />
+                      </Link>
+                    ) : (
+                      <span className="flex items-center justify-center gap-2 cursor-pointer">
+                        Ver Detalhes
+                        <ArrowRight className="h-4 w-4 group-hover/btn:translate-x-1 transition-transform" />
+                      </span>
+                    )}
                   </Button>
                 </CardContent>
               </Card>

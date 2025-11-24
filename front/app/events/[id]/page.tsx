@@ -56,8 +56,13 @@ export default function EventDetailsPage() {
 
   useEffect(() => {
     if (params.id) {
+      // Carregar evento imediatamente (já verifica cache primeiro)
       loadEvent();
-      checkInscription();
+      
+      // Só verificar inscrição se estiver online e autenticado
+      if (navigator.onLine && session) {
+        checkInscription();
+      }
     }
   }, [params.id, session]);
 
@@ -130,10 +135,13 @@ export default function EventDetailsPage() {
       // Se não encontrou cache e está offline, mostrar erro
       if (!navigator.onLine) {
         toast.error('Sem conexão e sem dados em cache para este evento');
-        setTimeout(() => {
-          router.push('/events');
-        }, 2000);
         setIsLoading(false);
+        // Usar window.location para evitar RSC quando offline
+        setTimeout(() => {
+          if (typeof window !== 'undefined') {
+            window.location.href = '/events';
+          }
+        }, 2000);
         return;
       }
       
