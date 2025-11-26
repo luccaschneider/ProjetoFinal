@@ -15,9 +15,13 @@ const options = {
     },
     servers: [
       {
-        url: `http://localhost:${process.env.PORT || 3001}`,
-        description: 'Servidor de desenvolvimento',
+        url: process.env.SERVER_URL || `http://localhost:${process.env.PORT || 3001}`,
+        description: process.env.SERVER_URL ? 'Servidor Principal (Produção)' : 'Servidor de Desenvolvimento',
       },
+      ...(process.env.SERVER_URL && !process.env.SERVER_URL.includes('localhost') ? [{
+        url: `http://localhost:${process.env.PORT || 3001}`,
+        description: 'Servidor Local (Fallback)',
+      }] : []),
     ],
     components: {
       securitySchemes: {
